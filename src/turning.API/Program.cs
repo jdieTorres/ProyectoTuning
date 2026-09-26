@@ -31,6 +31,20 @@ builder.Services.AddAiTextGeneration(builder.Configuration, builder.Environment,
 
 builder.Services.AddAuthorization();
 
+// Sonda de vida para el contenedor / Azure.
+builder.Services.AddHealthChecks();
+
+// En contenedor el TLS termina en el proxy de entrada (Azure): sin esto la API
+// ve todo como http y UseHttpsRedirection decide mal. El proxy no tiene IP fija,
+// por eso se limpian las listas de proxies conocidos.
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+        | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Agregar controllers y Swagger
 // El filtro de propietario va global: las rutas anidadas bajo
 // /api/sessions/{sessionId}/... nacieron sin validarlo, y hacerlo opt-in
@@ -89,6 +103,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configurar middleware
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -124,5 +140,6 @@ app.UseCors("AllowSpecific");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();
